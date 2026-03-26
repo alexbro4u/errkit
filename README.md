@@ -1,6 +1,7 @@
 # errkit
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/alexbro4u/errkit.svg)](https://pkg.go.dev/github.com/alexbro4u/errkit)
+[![Go Report Card](https://goreportcard.com/badge/github.com/alexbro4u/errkit)](https://goreportcard.com/report/github.com/alexbro4u/errkit)
 
 Structured, extensible error handling for Go with codes, metadata, and `slog` integration.
 
