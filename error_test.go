@@ -1,4 +1,4 @@
-package errkit
+package errkit_test
 
 import (
 	"encoding/json"
@@ -7,24 +7,26 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/alexbro4u/errkit"
 )
 
 // ---- New ----
 
 func TestNew(t *testing.T) {
-	err := New("something failed")
+	err := errkit.New("something failed")
 	if err.Error() != "something failed" {
 		t.Fatalf("unexpected message: %s", err.Error())
 	}
 }
 
 func TestNewWithOptions(t *testing.T) {
-	err := New("not found",
-		Code("NOT_FOUND"),
-		HTTP(404),
-		Retryable(),
-		WithSev(SeverityHigh),
-		WithFields(String("user_id", "u123")),
+	err := errkit.New("not found",
+		errkit.Code("NOT_FOUND"),
+		errkit.HTTP(404),
+		errkit.Retryable(),
+		errkit.WithSev(errkit.SeverityHigh),
+		errkit.WithFields(errkit.String("user_id", "u123")),
 	)
 
 	if err.ErrCode() != "NOT_FOUND" {
@@ -39,7 +41,7 @@ func TestNewWithOptions(t *testing.T) {
 
 func TestWrap(t *testing.T) {
 	cause := errors.New("db timeout")
-	err := Wrap(cause, "failed to fetch user")
+	err := errkit.Wrap(cause, "failed to fetch user")
 
 	if err.Error() != "failed to fetch user: db timeout" {
 		t.Fatalf("unexpected message: %s", err.Error())
@@ -50,7 +52,7 @@ func TestWrap(t *testing.T) {
 }
 
 func TestWrapNil(t *testing.T) {
-	err := Wrap(nil, "nothing")
+	err := errkit.Wrap(nil, "nothing")
 	if err != nil {
 		t.Fatal("Wrap(nil) should return nil")
 	}
@@ -58,10 +60,10 @@ func TestWrapNil(t *testing.T) {
 
 func TestWrapWithOptions(t *testing.T) {
 	cause := errors.New("connection refused")
-	err := Wrap(cause, "service unavailable",
-		Code("SERVICE_UNAVAILABLE"),
-		HTTP(503),
-		Retryable(),
+	err := errkit.Wrap(cause, "service unavailable",
+		errkit.Code("SERVICE_UNAVAILABLE"),
+		errkit.HTTP(503),
+		errkit.Retryable(),
 	)
 
 	if err.ErrCode() != "SERVICE_UNAVAILABLE" {
@@ -75,25 +77,25 @@ func TestWrapWithOptions(t *testing.T) {
 // ---- With ----
 
 func TestWith(t *testing.T) {
-	err := New("fail", Code("X"))
-	err2 := With(err, String("key", "val"))
+	err := errkit.New("fail", errkit.Code("X"))
+	err2 := errkit.With(err, errkit.String("key", "val"))
 
 	if err2 == err {
 		t.Fatal("With must return a new error (immutability)")
 	}
-	v, ok := GetString(err2, "key")
+	v, ok := errkit.GetString(err2, "key")
 	if !ok || v != "val" {
 		t.Fatalf("expected key=val, got %v %v", v, ok)
 	}
 	// original unchanged
-	_, ok = GetString(err, "key")
+	_, ok = errkit.GetString(err, "key")
 	if ok {
 		t.Fatal("original error should not have the field")
 	}
 }
 
 func TestWithNil(t *testing.T) {
-	err := With(nil, String("k", "v"))
+	err := errkit.With(nil, errkit.String("k", "v"))
 	if err != nil {
 		t.Fatal("With(nil) should return nil")
 	}
@@ -102,8 +104,8 @@ func TestWithNil(t *testing.T) {
 // ---- WithCode ----
 
 func TestWithCode(t *testing.T) {
-	err := New("fail")
-	err2 := WithCode(err, "FAIL_CODE")
+	err := errkit.New("fail")
+	err2 := errkit.WithCode(err, "FAIL_CODE")
 	if err2.ErrCode() != "FAIL_CODE" {
 		t.Fatalf("unexpected code: %s", err2.ErrCode())
 	}
@@ -115,47 +117,47 @@ func TestWithCode(t *testing.T) {
 // ---- Retryable ----
 
 func TestRetryable(t *testing.T) {
-	err := New("timeout", Retryable())
-	if !IsRetryable(err) {
+	err := errkit.New("timeout", errkit.Retryable())
+	if !errkit.IsRetryable(err) {
 		t.Fatal("should be retryable")
 	}
 }
 
 func TestMarkRetryable(t *testing.T) {
-	err := New("timeout")
-	if IsRetryable(err) {
+	err := errkit.New("timeout")
+	if errkit.IsRetryable(err) {
 		t.Fatal("should not be retryable yet")
 	}
-	err2 := MarkRetryable(err)
-	if !IsRetryable(err2) {
+	err2 := errkit.MarkRetryable(err)
+	if !errkit.IsRetryable(err2) {
 		t.Fatal("should be retryable after mark")
 	}
 	// immutability
-	if IsRetryable(err) {
+	if errkit.IsRetryable(err) {
 		t.Fatal("original should not be retryable")
 	}
 }
 
 func TestNotRetryable(t *testing.T) {
-	err := New("fatal", NotRetryable())
-	if IsRetryable(err) {
+	err := errkit.New("fatal", errkit.NotRetryable())
+	if errkit.IsRetryable(err) {
 		t.Fatal("should not be retryable")
 	}
 }
 
 func TestMarkNotRetryable(t *testing.T) {
-	err := MarkRetryable(New("timeout"))
-	err2 := MarkNotRetryable(err)
-	if IsRetryable(err2) {
+	err := errkit.MarkRetryable(errkit.New("timeout"))
+	err2 := errkit.MarkNotRetryable(err)
+	if errkit.IsRetryable(err2) {
 		t.Fatal("should not be retryable after mark")
 	}
 }
 
 func TestMarkRetryableNil(t *testing.T) {
-	if MarkRetryable(nil) != nil {
+	if errkit.MarkRetryable(nil) != nil {
 		t.Fatal("MarkRetryable(nil) should return nil")
 	}
-	if MarkNotRetryable(nil) != nil {
+	if errkit.MarkNotRetryable(nil) != nil {
 		t.Fatal("MarkNotRetryable(nil) should return nil")
 	}
 }
@@ -163,42 +165,42 @@ func TestMarkRetryableNil(t *testing.T) {
 // ---- Severity ----
 
 func TestSeverity(t *testing.T) {
-	err := New("critical issue", WithSev(SeverityCritical))
-	s, ok := GetSeverity(err)
-	if !ok || s != SeverityCritical {
+	err := errkit.New("critical issue", errkit.WithSev(errkit.SeverityCritical))
+	s, ok := errkit.GetSeverity(err)
+	if !ok || s != errkit.SeverityCritical {
 		t.Fatalf("unexpected severity: %v %v", s, ok)
 	}
 }
 
 func TestWithSeverity(t *testing.T) {
-	err := New("issue")
-	err2 := WithSeverity(err, SeverityHigh)
-	s, ok := GetSeverity(err2)
-	if !ok || s != SeverityHigh {
+	err := errkit.New("issue")
+	err2 := errkit.WithSeverity(err, errkit.SeverityHigh)
+	s, ok := errkit.GetSeverity(err2)
+	if !ok || s != errkit.SeverityHigh {
 		t.Fatalf("unexpected severity: %v %v", s, ok)
 	}
-	_, ok = GetSeverity(err)
+	_, ok = errkit.GetSeverity(err)
 	if ok {
 		t.Fatal("original should have no severity")
 	}
 }
 
 func TestWithSeverityNil(t *testing.T) {
-	if WithSeverity(nil, SeverityHigh) != nil {
+	if errkit.WithSeverity(nil, errkit.SeverityHigh) != nil {
 		t.Fatal("WithSeverity(nil) should return nil")
 	}
 }
 
 func TestSeverityString(t *testing.T) {
 	tests := []struct {
-		s    Severity
+		s    errkit.Severity
 		want string
 	}{
-		{SeverityLow, "low"},
-		{SeverityMedium, "medium"},
-		{SeverityHigh, "high"},
-		{SeverityCritical, "critical"},
-		{Severity(99), "unknown"},
+		{errkit.SeverityLow, "low"},
+		{errkit.SeverityMedium, "medium"},
+		{errkit.SeverityHigh, "high"},
+		{errkit.SeverityCritical, "critical"},
+		{errkit.Severity(99), "unknown"},
 	}
 	for _, tt := range tests {
 		if got := tt.s.String(); got != tt.want {
@@ -210,32 +212,32 @@ func TestSeverityString(t *testing.T) {
 // ---- HTTP Status ----
 
 func TestHTTPStatus(t *testing.T) {
-	err := New("not found", Code("NOT_FOUND"), HTTP(404))
-	if status := HTTPStatus(err); status != 404 {
+	err := errkit.New("not found", errkit.Code("NOT_FOUND"), errkit.HTTP(404))
+	if status := errkit.HTTPStatus(err); status != 404 {
 		t.Fatalf("unexpected status: %d", status)
 	}
 }
 
 func TestHTTPStatusDefault(t *testing.T) {
-	err := New("unknown error")
-	if status := HTTPStatus(err); status != 500 {
+	err := errkit.New("unknown error")
+	if status := errkit.HTTPStatus(err); status != 500 {
 		t.Fatalf("expected 500 default, got: %d", status)
 	}
 }
 
 func TestWithHTTP(t *testing.T) {
-	err := New("err")
-	err2 := WithHTTP(err, 400)
-	if HTTPStatus(err2) != 400 {
+	err := errkit.New("err")
+	err2 := errkit.WithHTTP(err, 400)
+	if errkit.HTTPStatus(err2) != 400 {
 		t.Fatal("expected 400")
 	}
-	if HTTPStatus(err) != 500 {
+	if errkit.HTTPStatus(err) != 500 {
 		t.Fatal("original should default to 500")
 	}
 }
 
 func TestWithHTTPNil(t *testing.T) {
-	if WithHTTP(nil, 400) != nil {
+	if errkit.WithHTTP(nil, 400) != nil {
 		t.Fatal("WithHTTP(nil) should return nil")
 	}
 }
@@ -243,7 +245,7 @@ func TestWithHTTPNil(t *testing.T) {
 // ---- Stack Trace ----
 
 func TestWithStack(t *testing.T) {
-	err := WithStack(New("fail"))
+	err := errkit.WithStack(errkit.New("fail"))
 	if err.StackTrace() == nil {
 		t.Fatal("expected stack trace")
 	}
@@ -253,14 +255,14 @@ func TestWithStack(t *testing.T) {
 }
 
 func TestStackOption(t *testing.T) {
-	err := New("fail", Stack())
+	err := errkit.New("fail", errkit.Stack())
 	if err.StackTrace() == nil || len(err.StackTrace()) == 0 {
 		t.Fatal("expected stack trace from option")
 	}
 }
 
 func TestWithStackNil(t *testing.T) {
-	if WithStack(nil) != nil {
+	if errkit.WithStack(nil) != nil {
 		t.Fatal("WithStack(nil) should return nil")
 	}
 }
@@ -269,8 +271,8 @@ func TestWithStackNil(t *testing.T) {
 
 func TestErrorsIs(t *testing.T) {
 	sentinel := errors.New("sentinel")
-	err := Wrap(sentinel, "layer1")
-	err2 := Wrap(err, "layer2")
+	err := errkit.Wrap(sentinel, "layer1")
+	err2 := errkit.Wrap(err, "layer2")
 
 	if !errors.Is(err2, sentinel) {
 		t.Fatal("errors.Is should find sentinel through chain")
@@ -278,8 +280,8 @@ func TestErrorsIs(t *testing.T) {
 }
 
 func TestErrorsAs(t *testing.T) {
-	err := Wrap(New("inner", Code("INNER")), "outer")
-	var e *Error
+	err := errkit.Wrap(errkit.New("inner", errkit.Code("INNER")), "outer")
+	var e *errkit.Error
 	if !errors.As(err, &e) {
 		t.Fatal("errors.As should find *Error")
 	}
@@ -288,25 +290,25 @@ func TestErrorsAs(t *testing.T) {
 // ---- CodeIs / GetCode ----
 
 func TestCodeIs(t *testing.T) {
-	err := Wrap(New("inner", Code("DB_ERROR")), "outer")
-	if !CodeIs(err, "DB_ERROR") {
+	err := errkit.Wrap(errkit.New("inner", errkit.Code("DB_ERROR")), "outer")
+	if !errkit.CodeIs(err, "DB_ERROR") {
 		t.Fatal("CodeIs should find code through chain")
 	}
-	if CodeIs(err, "OTHER") {
+	if errkit.CodeIs(err, "OTHER") {
 		t.Fatal("CodeIs should not match unrelated code")
 	}
 }
 
 func TestGetCode(t *testing.T) {
-	err := Wrap(New("inner", Code("DB_ERROR")), "outer", Code("SERVICE_ERROR"))
-	if code := GetCode(err); code != "SERVICE_ERROR" {
+	err := errkit.Wrap(errkit.New("inner", errkit.Code("DB_ERROR")), "outer", errkit.Code("SERVICE_ERROR"))
+	if code := errkit.GetCode(err); code != "SERVICE_ERROR" {
 		t.Fatalf("expected SERVICE_ERROR, got %s", code)
 	}
 }
 
 func TestGetCodeEmpty(t *testing.T) {
 	err := errors.New("plain error")
-	if code := GetCode(err); code != "" {
+	if code := errkit.GetCode(err); code != "" {
 		t.Fatalf("expected empty code, got %s", code)
 	}
 }
@@ -314,37 +316,37 @@ func TestGetCodeEmpty(t *testing.T) {
 // ---- GetField / GetString / GetInt ----
 
 func TestGetField(t *testing.T) {
-	err := New("fail", WithFields(String("key", "val"), Int("count", 5)))
-	v, ok := GetField(err, "key")
+	err := errkit.New("fail", errkit.WithFields(errkit.String("key", "val"), errkit.Int("count", 5)))
+	v, ok := errkit.GetField(err, "key")
 	if !ok || v != "val" {
 		t.Fatalf("unexpected: %v %v", v, ok)
 	}
-	v, ok = GetField(err, "count")
+	v, ok = errkit.GetField(err, "count")
 	if !ok || v != int64(5) {
 		t.Fatalf("unexpected: %v %v", v, ok)
 	}
 }
 
 func TestGetFieldFromChain(t *testing.T) {
-	inner := New("inner", WithFields(String("trace_id", "abc")))
-	outer := Wrap(inner, "outer")
-	v, ok := GetString(outer, "trace_id")
+	inner := errkit.New("inner", errkit.WithFields(errkit.String("trace_id", "abc")))
+	outer := errkit.Wrap(inner, "outer")
+	v, ok := errkit.GetString(outer, "trace_id")
 	if !ok || v != "abc" {
 		t.Fatalf("expected trace_id=abc from chain, got %v %v", v, ok)
 	}
 }
 
 func TestGetInt(t *testing.T) {
-	err := New("fail", WithFields(Int("attempts", 3)))
-	v, ok := GetInt(err, "attempts")
+	err := errkit.New("fail", errkit.WithFields(errkit.Int("attempts", 3)))
+	v, ok := errkit.GetInt(err, "attempts")
 	if !ok || v != 3 {
 		t.Fatalf("unexpected: %v %v", v, ok)
 	}
 }
 
 func TestGetFieldNotFound(t *testing.T) {
-	err := New("fail")
-	_, ok := GetField(err, "missing")
+	err := errkit.New("fail")
+	_, ok := errkit.GetField(err, "missing")
 	if ok {
 		t.Fatal("should not find missing field")
 	}
@@ -353,12 +355,12 @@ func TestGetFieldNotFound(t *testing.T) {
 // ---- Format ----
 
 func TestFormatVerbose(t *testing.T) {
-	err := New("fail",
-		Code("FAIL"),
-		Retryable(),
-		WithSev(SeverityHigh),
-		HTTP(503),
-		WithFields(String("svc", "auth")),
+	err := errkit.New("fail",
+		errkit.Code("FAIL"),
+		errkit.Retryable(),
+		errkit.WithSev(errkit.SeverityHigh),
+		errkit.HTTP(503),
+		errkit.WithFields(errkit.String("svc", "auth")),
 	)
 	out := fmt.Sprintf("%+v", err)
 	for _, want := range []string{"fail", "code: FAIL", "retryable: true", "severity: high", "http: 503", "svc: auth"} {
@@ -369,7 +371,7 @@ func TestFormatVerbose(t *testing.T) {
 }
 
 func TestFormatDefault(t *testing.T) {
-	err := New("fail")
+	err := errkit.New("fail")
 	if fmt.Sprintf("%v", err) != "fail" {
 		t.Fatal("default format should equal Error()")
 	}
@@ -379,7 +381,7 @@ func TestFormatDefault(t *testing.T) {
 }
 
 func TestFormatQuoted(t *testing.T) {
-	err := New("fail")
+	err := errkit.New("fail")
 	if fmt.Sprintf("%q", err) != `"fail"` {
 		t.Fatal("quoted format incorrect")
 	}
@@ -388,12 +390,12 @@ func TestFormatQuoted(t *testing.T) {
 // ---- JSON ----
 
 func TestJSON(t *testing.T) {
-	err := New("not found",
-		Code("NOT_FOUND"),
-		HTTP(404),
-		Retryable(),
-		WithSev(SeverityHigh),
-		WithFields(String("user_id", "u1"), Int("attempt", 2)),
+	err := errkit.New("not found",
+		errkit.Code("NOT_FOUND"),
+		errkit.HTTP(404),
+		errkit.Retryable(),
+		errkit.WithSev(errkit.SeverityHigh),
+		errkit.WithFields(errkit.String("user_id", "u1"), errkit.Int("attempt", 2)),
 	)
 
 	data, marshalErr := json.Marshal(err)
@@ -432,7 +434,7 @@ func TestJSON(t *testing.T) {
 
 func TestJSONWithCause(t *testing.T) {
 	cause := errors.New("db timeout")
-	err := Wrap(cause, "service error", Code("TIMEOUT"))
+	err := errkit.Wrap(cause, "service error", errkit.Code("TIMEOUT"))
 	data, marshalErr := json.Marshal(err)
 	if marshalErr != nil {
 		t.Fatalf("marshal error: %v", marshalErr)
@@ -449,9 +451,9 @@ func TestJSONWithCause(t *testing.T) {
 // ---- slog.LogValuer ----
 
 func TestLogValue(t *testing.T) {
-	err := New("not found",
-		Code("NOT_FOUND"),
-		WithFields(String("user_id", "u1")),
+	err := errkit.New("not found",
+		errkit.Code("NOT_FOUND"),
+		errkit.WithFields(errkit.String("user_id", "u1")),
 	)
 
 	val := err.LogValue()
@@ -474,9 +476,9 @@ func TestLogValue(t *testing.T) {
 // ---- Immutability ----
 
 func TestImmutability(t *testing.T) {
-	err := New("base", Code("BASE"), WithFields(String("k", "v")))
-	err2 := With(err, String("k2", "v2"))
-	err3 := WithCode(err, "CHANGED")
+	err := errkit.New("base", errkit.Code("BASE"), errkit.WithFields(errkit.String("k", "v")))
+	err2 := errkit.With(err, errkit.String("k2", "v2"))
+	err3 := errkit.WithCode(err, "CHANGED")
 
 	// original unchanged
 	if err.ErrCode() != "BASE" {
@@ -498,11 +500,11 @@ func TestImmutability(t *testing.T) {
 
 func TestWithPlainError(t *testing.T) {
 	plain := errors.New("plain")
-	err := With(plain, String("key", "val"))
+	err := errkit.With(plain, errkit.String("key", "val"))
 	if err == nil {
 		t.Fatal("should not be nil")
 	}
-	v, ok := GetString(err, "key")
+	v, ok := errkit.GetString(err, "key")
 	if !ok || v != "val" {
 		t.Fatalf("expected key=val, got %v %v", v, ok)
 	}
@@ -515,7 +517,7 @@ func TestWithPlainError(t *testing.T) {
 // ---- WithCode on nil ----
 
 func TestWithCodeNil(t *testing.T) {
-	if WithCode(nil, "X") != nil {
+	if errkit.WithCode(nil, "X") != nil {
 		t.Fatal("WithCode(nil) should return nil")
 	}
 }
@@ -523,14 +525,14 @@ func TestWithCodeNil(t *testing.T) {
 // ---- Field types ----
 
 func TestFieldTypes(t *testing.T) {
-	err := New("test",
-		WithFields(
-			String("s", "hello"),
-			Int("i", 42),
-			Int64("i64", 999),
-			Bool("b", true),
-			Float64("f", 3.14),
-			Any("a", []int{1, 2}),
+	err := errkit.New("test",
+		errkit.WithFields(
+			errkit.String("s", "hello"),
+			errkit.Int("i", 42),
+			errkit.Int64("i64", 999),
+			errkit.Bool("b", true),
+			errkit.Float64("f", 3.14),
+			errkit.Any("a", []int{1, 2}),
 		),
 	)
 
@@ -563,7 +565,7 @@ func TestFieldTypes(t *testing.T) {
 
 func TestMessage(t *testing.T) {
 	cause := errors.New("root")
-	err := Wrap(cause, "wrapper")
+	err := errkit.Wrap(cause, "wrapper")
 	if err.Message() != "wrapper" {
 		t.Fatalf("Message() should return own msg, got: %s", err.Message())
 	}
@@ -575,24 +577,24 @@ func TestMessage(t *testing.T) {
 // ---- Deep chain ----
 
 func TestDeepChain(t *testing.T) {
-	e0 := New("level0", Code("L0"), WithFields(String("depth", "0")))
-	e1 := Wrap(e0, "level1", Code("L1"))
-	e2 := Wrap(e1, "level2")
-	e3 := Wrap(e2, "level3", Retryable(), HTTP(502))
+	e0 := errkit.New("level0", errkit.Code("L0"), errkit.WithFields(errkit.String("depth", "0")))
+	e1 := errkit.Wrap(e0, "level1", errkit.Code("L1"))
+	e2 := errkit.Wrap(e1, "level2")
+	e3 := errkit.Wrap(e2, "level3", errkit.Retryable(), errkit.HTTP(502))
 
-	if !CodeIs(e3, "L0") {
+	if !errkit.CodeIs(e3, "L0") {
 		t.Fatal("should find L0 in chain")
 	}
-	if !CodeIs(e3, "L1") {
+	if !errkit.CodeIs(e3, "L1") {
 		t.Fatal("should find L1 in chain")
 	}
-	if !IsRetryable(e3) {
+	if !errkit.IsRetryable(e3) {
 		t.Fatal("should be retryable")
 	}
-	if HTTPStatus(e3) != 502 {
+	if errkit.HTTPStatus(e3) != 502 {
 		t.Fatal("should be 502")
 	}
-	v, ok := GetString(e3, "depth")
+	v, ok := errkit.GetString(e3, "depth")
 	if !ok || v != "0" {
 		t.Fatal("should find depth=0 in deep chain")
 	}

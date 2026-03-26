@@ -21,7 +21,7 @@ type Error struct {
 	httpStatus int
 }
 
-// compile-time checks
+// compile-time checks.
 var (
 	_ error          = (*Error)(nil)
 	_ fmt.Formatter  = (*Error)(nil)
@@ -146,25 +146,7 @@ func (e *Error) Format(f fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if f.Flag('+') {
-			fmt.Fprintf(f, "%s", e.Error())
-			if e.code != "" {
-				fmt.Fprintf(f, "\n  code: %s", e.code)
-			}
-			if e.retryable != nil {
-				fmt.Fprintf(f, "\n  retryable: %t", *e.retryable)
-			}
-			if e.severity != nil {
-				fmt.Fprintf(f, "\n  severity: %s", e.severity)
-			}
-			if e.httpStatus != 0 {
-				fmt.Fprintf(f, "\n  http: %d", e.httpStatus)
-			}
-			for _, field := range e.fields {
-				fmt.Fprintf(f, "\n  %s: %v", field.Key, field.Value())
-			}
-			if len(e.stack) > 0 {
-				fmt.Fprintf(f, "\n%s", e.stack.String())
-			}
+			e.formatVerbose(f)
 			return
 		}
 		fmt.Fprint(f, e.Error())
@@ -175,11 +157,34 @@ func (e *Error) Format(f fmt.State, verb rune) {
 	}
 }
 
+func (e *Error) formatVerbose(f fmt.State) {
+	fmt.Fprintf(f, "%s", e.Error())
+	if e.code != "" {
+		fmt.Fprintf(f, "\n  code: %s", e.code)
+	}
+	if e.retryable != nil {
+		fmt.Fprintf(f, "\n  retryable: %t", *e.retryable)
+	}
+	if e.severity != nil {
+		fmt.Fprintf(f, "\n  severity: %s", e.severity)
+	}
+	if e.httpStatus != 0 {
+		fmt.Fprintf(f, "\n  http: %d", e.httpStatus)
+	}
+	for _, field := range e.fields {
+		fmt.Fprintf(f, "\n  %s: %v", field.Key, field.Value())
+	}
+	if len(e.stack) > 0 {
+		fmt.Fprintf(f, "\n%s", e.stack.String())
+	}
+}
+
 // ---- slog.LogValuer ----
 
 // LogValue returns a structured slog.Value for integration with log/slog.
 func (e *Error) LogValue() slog.Value {
-	attrs := make([]slog.Attr, 0, 4+len(e.fields))
+	const baseAttrs = 4
+	attrs := make([]slog.Attr, 0, baseAttrs+len(e.fields))
 	attrs = append(attrs, slog.String("msg", e.msg))
 	if e.code != "" {
 		attrs = append(attrs, slog.String("code", e.code))
@@ -257,7 +262,7 @@ func (e *Error) Fields() []Field {
 	return out
 }
 
-// Stack returns the captured stack trace, or nil.
+// StackTrace returns the captured stack trace, or nil.
 func (e *Error) StackTrace() StackTrace { return e.stack }
 
 // ---- query helpers (walk the chain) ----

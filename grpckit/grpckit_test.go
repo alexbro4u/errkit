@@ -1,10 +1,11 @@
-package grpckit
+package grpckit_test
 
 import (
 	"net/http"
 	"testing"
 
 	"github.com/alexbro4u/errkit"
+	"github.com/alexbro4u/errkit/grpckit"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -15,7 +16,7 @@ func TestError(t *testing.T) {
 		errkit.HTTP(404),
 	)
 
-	grpcErr := Error(err)
+	grpcErr := grpckit.Error(err)
 	st, ok := status.FromError(grpcErr)
 	if !ok {
 		t.Fatal("expected gRPC status error")
@@ -29,14 +30,14 @@ func TestError(t *testing.T) {
 }
 
 func TestErrorNil(t *testing.T) {
-	if Error(nil) != nil {
+	if grpckit.Error(nil) != nil {
 		t.Fatal("Error(nil) should return nil")
 	}
 }
 
 func TestErrorDefault500(t *testing.T) {
 	err := errkit.New("unknown")
-	grpcErr := Error(err)
+	grpcErr := grpckit.Error(err)
 	st, _ := status.FromError(grpcErr)
 	if st.Code() != codes.Internal {
 		t.Fatalf("expected Internal for default 500, got %v", st.Code())
@@ -45,14 +46,14 @@ func TestErrorDefault500(t *testing.T) {
 
 func TestStatus(t *testing.T) {
 	err := errkit.New("bad request", errkit.HTTP(400))
-	st := Status(err)
+	st := grpckit.Status(err)
 	if st.Code() != codes.InvalidArgument {
 		t.Fatalf("expected InvalidArgument, got %v", st.Code())
 	}
 }
 
 func TestStatusNil(t *testing.T) {
-	st := Status(nil)
+	st := grpckit.Status(nil)
 	if st.Code() != codes.OK {
 		t.Fatalf("expected OK for nil, got %v", st.Code())
 	}
@@ -60,7 +61,7 @@ func TestStatusNil(t *testing.T) {
 
 func TestFromStatus(t *testing.T) {
 	grpcErr := status.Error(codes.NotFound, "user not found")
-	ek := FromStatus(grpcErr)
+	ek := grpckit.FromStatus(grpcErr)
 	if ek == nil {
 		t.Fatal("expected non-nil error")
 	}
@@ -73,24 +74,24 @@ func TestFromStatus(t *testing.T) {
 }
 
 func TestFromStatusNil(t *testing.T) {
-	if FromStatus(nil) != nil {
+	if grpckit.FromStatus(nil) != nil {
 		t.Fatal("FromStatus(nil) should return nil")
 	}
 }
 
 func TestIsGRPCError(t *testing.T) {
 	grpcErr := status.Error(codes.PermissionDenied, "denied")
-	if !IsGRPCError(grpcErr, codes.PermissionDenied) {
+	if !grpckit.IsGRPCError(grpcErr, codes.PermissionDenied) {
 		t.Fatal("expected PermissionDenied")
 	}
-	if IsGRPCError(grpcErr, codes.NotFound) {
+	if grpckit.IsGRPCError(grpcErr, codes.NotFound) {
 		t.Fatal("should not match NotFound")
 	}
 }
 
 func TestIsGRPCErrorNonGRPC(t *testing.T) {
 	err := errkit.New("plain")
-	if IsGRPCError(err, codes.Internal) {
+	if grpckit.IsGRPCError(err, codes.Internal) {
 		t.Fatal("non-gRPC error should return false")
 	}
 }
@@ -121,7 +122,7 @@ func TestHTTPToGRPC(t *testing.T) {
 		{418, codes.InvalidArgument},
 	}
 	for _, tt := range tests {
-		got := HTTPToGRPC(tt.http)
+		got := grpckit.HTTPToGRPC(tt.http)
 		if got != tt.grpc {
 			t.Errorf("HTTPToGRPC(%d) = %v, want %v", tt.http, got, tt.grpc)
 		}
@@ -152,7 +153,7 @@ func TestGRPCToHTTP(t *testing.T) {
 		{codes.Unauthenticated, 401},
 	}
 	for _, tt := range tests {
-		got := GRPCToHTTP(tt.grpc)
+		got := grpckit.GRPCToHTTP(tt.grpc)
 		if got != tt.http {
 			t.Errorf("GRPCToHTTP(%v) = %d, want %d", tt.grpc, got, tt.http)
 		}
@@ -175,7 +176,7 @@ func TestErrorHTTPMappings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := errkit.New(tt.name, errkit.HTTP(tt.http))
-			grpcErr := Error(err)
+			grpcErr := grpckit.Error(err)
 			st, _ := status.FromError(grpcErr)
 			if st.Code() != tt.wantCode {
 				t.Errorf("Error(HTTP=%d): got %v, want %v", tt.http, st.Code(), tt.wantCode)
@@ -186,8 +187,8 @@ func TestErrorHTTPMappings(t *testing.T) {
 
 func TestFromStatusRoundTrip(t *testing.T) {
 	orig := errkit.New("not found", errkit.Code("NOT_FOUND"), errkit.HTTP(404))
-	grpcErr := Error(orig)
-	recovered := FromStatus(grpcErr)
+	grpcErr := grpckit.Error(orig)
+	recovered := grpckit.FromStatus(grpcErr)
 
 	if errkit.HTTPStatus(recovered) != 404 {
 		t.Fatalf("expected 404 after round-trip, got %d", errkit.HTTPStatus(recovered))

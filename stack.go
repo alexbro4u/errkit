@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+const (
+	// callersSkip is the number of frames runtime.Callers skips internally.
+	callersSkip = 2
+	// stackSkipOption is the number of frames to skip when capturing stack from an Option.
+	stackSkipOption = 2
+)
+
 // Frame represents a single stack frame.
 type Frame struct {
 	Function string `json:"function"`
@@ -37,7 +44,7 @@ func (st StackTrace) String() string {
 func captureStack(skip int) StackTrace {
 	const maxDepth = 32
 	var pcs [maxDepth]uintptr
-	n := runtime.Callers(skip+2, pcs[:])
+	n := runtime.Callers(skip+callersSkip, pcs[:])
 	if n == 0 {
 		return nil
 	}

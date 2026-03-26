@@ -10,17 +10,18 @@ const (
 	SeverityCritical                 // SeverityCritical indicates a critical error that demands immediate action.
 )
 
-var severityNames = [...]string{
-	SeverityLow:      "low",
-	SeverityMedium:   "medium",
-	SeverityHigh:     "high",
-	SeverityCritical: "critical",
-}
-
 // String returns the string representation of the severity level.
 func (s Severity) String() string {
-	if int(s) < len(severityNames) {
-		return severityNames[s]
+	switch s {
+	case SeverityLow:
+		return "low"
+	case SeverityMedium:
+		return "medium"
+	case SeverityHigh:
+		return "high"
+	case SeverityCritical:
+		return "critical"
+	default:
+		return "unknown"
 	}
-	return "unknown"
 }

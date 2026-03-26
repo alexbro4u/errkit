@@ -15,6 +15,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// httpStatusClientClosedRequest is the non-standard HTTP status code for client closed request (nginx).
+const httpStatusClientClosedRequest = 499
+
 // Error converts an errkit error into a gRPC status error.
 // The gRPC code is derived from the HTTP status on the error (see HTTPToGRPC).
 // The message is the error's Error() string.
@@ -70,7 +73,7 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
-		info *grpc.UnaryServerInfo,
+		_ *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
 		resp, err := handler(ctx, req)
@@ -90,7 +93,7 @@ func StreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(
 		srv any,
 		ss grpc.ServerStream,
-		info *grpc.StreamServerInfo,
+		_ *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
 		err := handler(srv, ss)
@@ -154,7 +157,7 @@ func GRPCToHTTP(code codes.Code) int {
 	case codes.OK:
 		return http.StatusOK
 	case codes.Canceled:
-		return 499 // Client Closed Request
+		return httpStatusClientClosedRequest
 	case codes.Unknown:
 		return http.StatusInternalServerError
 	case codes.InvalidArgument:

@@ -50,6 +50,6 @@ func HTTP(status int) Option {
 // Stack captures the call stack at the point of error creation.
 func Stack() Option {
 	return func(e *Error) {
-		e.stack = captureStack(2)
+		e.stack = captureStack(stackSkipOption)
 	}
 }

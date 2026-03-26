@@ -1,4 +1,4 @@
-package httpkit
+package httpkit_test
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/alexbro4u/errkit"
+	"github.com/alexbro4u/errkit/httpkit"
 )
 
 func TestWriteError(t *testing.T) {
@@ -18,7 +19,7 @@ func TestWriteError(t *testing.T) {
 	)
 
 	w := httptest.NewRecorder()
-	WriteError(w, err)
+	httpkit.WriteError(w, err)
 
 	if w.Code != 404 {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -27,7 +28,7 @@ func TestWriteError(t *testing.T) {
 		t.Fatalf("unexpected content type: %s", ct)
 	}
 
-	var body ErrorBody
+	var body httpkit.ErrorBody
 	if uerr := json.NewDecoder(w.Body).Decode(&body); uerr != nil {
 		t.Fatalf("decode error: %v", uerr)
 	}
@@ -46,7 +47,7 @@ func TestWriteErrorDefault500(t *testing.T) {
 	err := errkit.New("unknown error")
 
 	w := httptest.NewRecorder()
-	WriteError(w, err)
+	httpkit.WriteError(w, err)
 
 	if w.Code != 500 {
 		t.Fatalf("expected 500, got %d", w.Code)
@@ -57,7 +58,7 @@ func TestWriteErrorWithStatus(t *testing.T) {
 	err := errkit.New("bad request", errkit.HTTP(400))
 
 	w := httptest.NewRecorder()
-	WriteErrorWithStatus(w, 422, err)
+	httpkit.WriteErrorWithStatus(w, http.StatusUnprocessableEntity, err)
 
 	if w.Code != 422 {
 		t.Fatalf("expected 422 override, got %d", w.Code)
@@ -68,13 +69,13 @@ func TestWriteErrorPlainError(t *testing.T) {
 	err := errors.New("plain error")
 
 	w := httptest.NewRecorder()
-	WriteError(w, err)
+	httpkit.WriteError(w, err)
 
 	if w.Code != 500 {
 		t.Fatalf("expected 500 for plain error, got %d", w.Code)
 	}
 
-	var body ErrorBody
+	var body httpkit.ErrorBody
 	if uerr := json.NewDecoder(w.Body).Decode(&body); uerr != nil {
 		t.Fatalf("decode error: %v", uerr)
 	}
@@ -88,13 +89,13 @@ func TestWriteErrorWrapped(t *testing.T) {
 	outer := errkit.Wrap(inner, "service failed")
 
 	w := httptest.NewRecorder()
-	WriteError(w, outer)
+	httpkit.WriteError(w, outer)
 
 	if w.Code != 503 {
 		t.Fatalf("expected 503 from chain, got %d", w.Code)
 	}
 
-	var body ErrorBody
+	var body httpkit.ErrorBody
 	if uerr := json.NewDecoder(w.Body).Decode(&body); uerr != nil {
 		t.Fatalf("decode error: %v", uerr)
 	}
@@ -104,7 +105,7 @@ func TestWriteErrorWrapped(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
-	h := Handler(func(w http.ResponseWriter, r *http.Request) error {
+	h := httpkit.Handler(func(w http.ResponseWriter, r *http.Request) error {
 		return errkit.New("forbidden",
 			errkit.Code("FORBIDDEN"),
 			errkit.HTTP(403),
@@ -112,14 +113,14 @@ func TestHandler(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/test", nil)
+	r := httptest.NewRequest(http.MethodGet, "/test", nil)
 	h.ServeHTTP(w, r)
 
 	if w.Code != 403 {
 		t.Fatalf("expected 403, got %d", w.Code)
 	}
 
-	var body ErrorBody
+	var body httpkit.ErrorBody
 	if uerr := json.NewDecoder(w.Body).Decode(&body); uerr != nil {
 		t.Fatalf("decode error: %v", uerr)
 	}
@@ -129,14 +130,14 @@ func TestHandler(t *testing.T) {
 }
 
 func TestHandlerNoError(t *testing.T) {
-	h := Handler(func(w http.ResponseWriter, r *http.Request) error {
-		w.WriteHeader(200)
-		w.Write([]byte(`{"ok":true}`))
+	h := httpkit.Handler(func(w http.ResponseWriter, r *http.Request) error {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
 		return nil
 	})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/test", nil)
+	r := httptest.NewRequest(http.MethodGet, "/test", nil)
 	h.ServeHTTP(w, r)
 
 	if w.Code != 200 {
@@ -149,17 +150,17 @@ func TestMiddlewarePanicRecovery(t *testing.T) {
 		panic("boom")
 	})
 
-	h := Middleware(inner)
+	h := httpkit.Middleware(inner)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/panic", nil)
+	r := httptest.NewRequest(http.MethodGet, "/panic", nil)
 	h.ServeHTTP(w, r)
 
 	if w.Code != 500 {
 		t.Fatalf("expected 500 after panic, got %d", w.Code)
 	}
 
-	var body ErrorBody
+	var body httpkit.ErrorBody
 	if uerr := json.NewDecoder(w.Body).Decode(&body); uerr != nil {
 		t.Fatalf("decode error: %v", uerr)
 	}
@@ -170,13 +171,13 @@ func TestMiddlewarePanicRecovery(t *testing.T) {
 
 func TestMiddlewareNoPanic(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	})
 
-	h := Middleware(inner)
+	h := httpkit.Middleware(inner)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/ok", nil)
+	r := httptest.NewRequest(http.MethodGet, "/ok", nil)
 	h.ServeHTTP(w, r)
 
 	if w.Code != 200 {
